@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Minecraft JS</title>
+  <style>
+    :root {
+      --hud-scale: min(1, 100vw / 900);
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #87ceeb;
+      font-family: "Trebuchet MS", sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    #crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 22px;
+      height: 22px;
+      transform: translate(-50%, -50%);
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+    }
+
+    #crosshair::before {
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 22px;
+      transform: translateX(-50%);
+    }
+
+    #crosshair::after {
+      top: 50%;
+      left: 0;
+      width: 22px;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    #hearts {
+      position: fixed;
+      left: 18px;
+      top: 18px;
+      display: grid;
+      grid-template-columns: repeat(5, 26px);
+      gap: 6px 8px;
+      filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.55));
+    }
+
+    .heart {
+      width: 26px;
+      height: 24px;
+      position: relative;
+      image-rendering: pixelated;
+    }
+
+    .heart::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: #261015;
+      clip-path: polygon(15% 0, 35% 0, 35% 10%, 50% 10%, 50% 0, 70% 0, 70% 10%, 85% 10%, 85% 30%, 75% 30%, 75% 50%, 65% 50%, 65% 60%, 55% 60%, 55% 70%, 45% 70%, 45% 60%, 35% 60%, 35% 50%, 25% 50%, 25% 30%, 15% 30%);
+      transform: scale(1.16);
+      transform-origin: center;
+    }
+
+    .heart::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #ff95ac 0 30%, #ff4f72 30% 58%, #d61a45 58% 100%);
+      clip-path: polygon(15% 0, 35% 0, 35% 10%, 50% 10%, 50% 0, 70% 0, 70% 10%, 85% 10%, 85% 30%, 75% 30%, 75% 50%, 65% 50%, 65% 60%, 55% 60%, 55% 70%, 45% 70%, 45% 60%, 35% 60%, 35% 50%, 25% 50%, 25% 30%, 15% 30%);
+    }
+
+    .heart.empty::after {
+      background: linear-gradient(180deg, #6c5a60 0 30%, #46353b 30% 58%, #2a1f24 58% 100%);
+    }
+
+    .heart.half::after {
+      background:
+        linear-gradient(90deg, transparent 50%, rgba(0, 0, 0, 0.55) 50% 54%, transparent 54%),
+        linear-gradient(180deg, #ff95ac 0 30%, #ff4f72 30% 58%, #d61a45 58% 100%);
+    }
+
+    #inventory {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(32, 24, 18, 0.55);
+      border: 3px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+
+    .slot {
+      width: 54px;
+      height: 54px;
+      border: 3px solid rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.25);
+      box-sizing: border-box;
+      position: relative;
+      image-rendering: pixelated;
+    }
+
+    .slot.active {
+      border-color: #fff3b0;
+      transform: translateY(-2px);
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.28);
+    }
+
+    .slot img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .slot span {
+      position: absolute;
+      left: 4px;
+      top: 2px;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    .slot .slot-count {
+      left: auto;
+      right: 4px;
+      top: auto;
+      bottom: 2px;
+      font-size: 14px;
+    }
+
+    #selected-label {
+      position: fixed;
+      left: 50%;
+      bottom: 92px;
+      transform: translateX(-50%);
+      color: white;
+      font-weight: bold;
+      text-shadow: 2px 2px 0 #000;
+      letter-spacing: 0.04em;
+    }
+
+    #mode-label {
+      position: fixed;
+      right: 18px;
+      top: 18px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 2px 2px 0 #000;
+      letter-spacing: 0.04em;
+    }
+
+    #hand {
+      position: fixed;
+      right: 5vw;
+      bottom: 2vh;
+      width: calc(210px * var(--hud-scale));
+      height: calc(210px * var(--hud-scale));
+      transform-origin: 78% 100%;
+      filter: drop-shadow(-16px 16px 12px rgba(0, 0, 0, 0.28));
+      animation: hand-idle 1.8s steps(2, end) infinite;
+    }
+
+    #hand.swing {
+      animation: swing 180ms steps(3, end);
+    }
+
+    #hand .forearm {
+      position: absolute;
+      right: 18px;
+      bottom: 0;
+      width: 94px;
+      height: 138px;
+      background:
+        linear-gradient(#5b86d4 0 0) 0 0 / 100% 43% no-repeat,
+        linear-gradient(#3d65b1 0 0) 0 43% / 100% 10% no-repeat,
+        linear-gradient(#d7a37e 0 0) 0 53% / 100% 47% no-repeat;
+      clip-path: polygon(22% 0, 100% 0, 100% 100%, 6% 100%, 6% 70%, 0 70%, 0 14%);
+      image-rendering: pixelated;
+      box-shadow:
+        inset -12px 0 0 #c38f6b,
+        inset 0 -12px 0 #c18c67,
+        inset 0 0 0 4px rgba(0, 0, 0, 0.18);
+    }
+
+    #hand .forearm::before {
+      content: "";
+      position: absolute;
+      right: 10px;
+      top: 76px;
+      width: 28px;
+      height: 44px;
+      background: #ebb58f;
+      box-shadow:
+        -22px 0 0 #dfab86,
+        -44px 0 0 #d39b76,
+        0 0 0 3px rgba(0, 0, 0, 0.12);
+    }
+
+    #hand .forearm::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      top: 54px;
+      width: 78px;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    #hand .hand-top {
+      position: absolute;
+      right: 84px;
+      bottom: 94px;
+      width: 84px;
+      height: 84px;
+      background:
+        linear-gradient(#efba93 0 0) 0 0 / 100% 100% no-repeat;
+      box-shadow:
+        inset -12px 0 0 #d39c77,
+        inset 0 -10px 0 #cb936f,
+        inset 0 0 0 4px rgba(0, 0, 0, 0.15);
+    }
+
+    #hand .thumb {
+      position: absolute;
+      right: 58px;
+      bottom: 96px;
+      width: 34px;
+      height: 54px;
+      background: #d7a17b;
+      box-shadow:
+        inset -8px 0 0 #c18a65,
+        inset 0 -8px 0 #be8864,
+        inset 0 0 0 3px rgba(0, 0, 0, 0.14);
+    }
+
+    @keyframes hand-idle {
+      0% {
+        transform: rotate(0deg) translate(0, 0);
+      }
+      50% {
+        transform: rotate(1deg) translate(0, 3px);
+      }
+      100% {
+        transform: rotate(0deg) translate(0, 0);
+      }
+    }
+
+    @keyframes swing {
+      0% {
+        transform: rotate(0deg) translate(0, 0);
+      }
+      45% {
+        transform: rotate(-24deg) translate(18px, 16px);
+      }
+      100% {
+        transform: rotate(0deg) translate(0, 0);
+      }
+    }
+  </style>
+</head>
+<body>
+<div id="hud" aria-hidden="true">
+  <div id="hearts">
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="mode-label"></div>
+  <div id="selected-label"></div>
+  <div id="inventory"></div>
+  <div id="hand">
+    <div class="forearm"></div>
+    <div class="hand-top"></div>
+    <div class="thumb"></div>
+  </div>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js";
+import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.158/examples/jsm/controls/PointerLockControls.js";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const light = new THREE.HemisphereLight(0xffffff, 0x5f7a89, 2.4);
+scene.add(light);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(8, 14, 6);
+scene.add(sun);
+
+const controls = new PointerLockControls(camera, document.body);
+document.addEventListener("click", () => controls.lock());
+
+const handElement = document.getElementById("hand");
+const heartElements = [...document.querySelectorAll(".heart")];
+const inventoryElement = document.getElementById("inventory");
+const selectedLabelElement = document.getElementById("selected-label");
+const modeLabelElement = document.getElementById("mode-label");
+
+const blocks = [];
+const drops = [];
+const blockSize = 1;
+const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+
+function createPixelTexture(palette) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext("2d");
+
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const row = palette[y] ?? palette[palette.length - 1];
+      ctx.fillStyle = row[x] ?? row[row.length - 1];
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function filledRow(...colors) {
+  return colors;
+}
+
+const textures = {
+  grassTop: createPixelTexture([
+    filledRow(...Array(16).fill("#66bb44")),
+    filledRow(...Array(16).fill("#73c34d")),
+    filledRow("#5ba238", "#68b53e", "#73c34d", "#6abc43", "#59a436", "#6cbc45", "#7ccc54", "#64b43d", "#5aa636", "#72c34c", "#6ab942", "#57a135", "#73c650", "#68b83f", "#5ca738", "#7ccc54"),
+    filledRow(...Array(16).fill("#6dbc44")),
+    filledRow("#5aa338", "#67b53e", "#73c34d", "#69bc44", "#5da93a", "#6cbc45", "#79c953", "#61b23c", "#5ba637", "#71c14b", "#6bb842", "#57a035", "#71c34f", "#67b63f", "#5ca739", "#7aca55"),
+    filledRow(...Array(16).fill("#68b73e")),
+    filledRow(...Array(16).fill("#73c34d")),
+    filledRow(...Array(16).fill("#5ba237")),
+    filledRow(...Array(16).fill("#67b63e")),
+    filledRow(...Array(16).fill("#73c34d")),
+    filledRow(...Array(16).fill("#61ae3b")),
+    filledRow(...Array(16).fill("#76c951")),
+    filledRow(...Array(16).fill("#5aa437")),
+    filledRow(...Array(16).fill("#70bf49")),
+    filledRow(...Array(16).fill("#67b53e")),
+    filledRow(...Array(16).fill("#77ca52"))
+  ]),
+  dirt: createPixelTexture([
+    filledRow(...Array(16).fill("#7c5532")),
+    filledRow(...Array(16).fill("#815a35")),
+    filledRow("#8d6138", "#7c5532", "#6d492b", "#8c6238", "#7e5733", "#6e4a2b", "#855b35", "#76502f", "#895f37", "#6c482a", "#825833", "#74502e", "#8d6239", "#6f4b2c", "#7f5733", "#6a4729"),
+    filledRow(...Array(16).fill("#74502f")),
+    filledRow("#6f4b2b", "#825833", "#93653b", "#785231", "#6b482a", "#8f633a", "#7a5431", "#6a4729", "#875d36", "#734e2e", "#8b6038", "#704b2c", "#93653b", "#76502f", "#865d36", "#6a4729"),
+    filledRow(...Array(16).fill("#825833")),
+    filledRow(...Array(16).fill("#6d492b")),
+    filledRow(...Array(16).fill("#8a5f37")),
+    filledRow(...Array(16).fill("#775130")),
+    filledRow(...Array(16).fill("#845b35")),
+    filledRow(...Array(16).fill("#6f4b2b")),
+    filledRow(...Array(16).fill("#90643a")),
+    filledRow(...Array(16).fill("#734e2e")),
+    filledRow(...Array(16).fill("#855c35")),
+    filledRow(...Array(16).fill("#6a4729")),
+    filledRow(...Array(16).fill("#8f6339"))
+  ]),
+  stone: createPixelTexture([
+    filledRow(...Array(16).fill("#8d8d8d")),
+    filledRow(...Array(16).fill("#7a7a7a")),
+    filledRow("#9a9a9a", "#868686", "#737373", "#9d9d9d", "#7e7e7e", "#6f6f6f", "#959595", "#7f7f7f", "#999999", "#707070", "#8f8f8f", "#787878", "#9b9b9b", "#727272", "#8a8a8a", "#6d6d6d"),
+    filledRow(...Array(16).fill("#818181")),
+    filledRow("#707070", "#909090", "#9e9e9e", "#838383", "#6d6d6d", "#989898", "#7e7e7e", "#707070", "#929292", "#797979", "#9b9b9b", "#747474", "#a0a0a0", "#7a7a7a", "#8f8f8f", "#6d6d6d"),
+    filledRow(...Array(16).fill("#8a8a8a")),
+    filledRow(...Array(16).fill("#707070")),
+    filledRow(...Array(16).fill("#9b9b9b")),
+    filledRow(...Array(16).fill("#7c7c7c")),
+    filledRow(...Array(16).fill("#929292")),
+    filledRow(...Array(16).fill("#6e6e6e")),
+    filledRow(...Array(16).fill("#a0a0a0")),
+    filledRow(...Array(16).fill("#7a7a7a")),
+    filledRow(...Array(16).fill("#8c8c8c")),
+    filledRow(...Array(16).fill("#717171")),
+    filledRow(...Array(16).fill("#9d9d9d"))
+  ]),
+  sand: createPixelTexture([
+    filledRow(...Array(16).fill("#decf86")),
+    filledRow(...Array(16).fill("#d7c67d")),
+    filledRow("#e6d893", "#d7c67d", "#cfbc70", "#eadf9b", "#dac97f", "#cfbc71", "#e2d38b", "#d4c277", "#e6d993", "#d0bd71", "#e1d187", "#d4c277", "#e8dc97", "#d0bd70", "#dccb80", "#ccb86c"),
+    filledRow(...Array(16).fill("#d7c67d")),
+    filledRow("#ceb96d", "#ddcc82", "#e8db96", "#d6c47a", "#ccb86c", "#e5d791", "#d8c67d", "#cdb96d", "#e1d289", "#d3c176", "#e6d892", "#d0bd72", "#eadf9a", "#d4c277", "#dfcf85", "#ccb86c"),
+    filledRow(...Array(16).fill("#e1d28a")),
+    filledRow(...Array(16).fill("#d1bd72")),
+    filledRow(...Array(16).fill("#e9de99")),
+    filledRow(...Array(16).fill("#d9c87d")),
+    filledRow(...Array(16).fill("#e2d38b")),
+    filledRow(...Array(16).fill("#ceb96e")),
+    filledRow(...Array(16).fill("#eadf9a")),
+    filledRow(...Array(16).fill("#d6c47a")),
+    filledRow(...Array(16).fill("#e0d187")),
+    filledRow(...Array(16).fill("#cfbc70")),
+    filledRow(...Array(16).fill("#e7db95"))
+  ])
+};
+
+const blockTypes = [
+  {
+    id: "grass",
+    name: "Gras",
+    inventoryTexture: textures.grassTop,
+    materials: [
+      new THREE.MeshStandardMaterial({ map: textures.dirt }),
+      new THREE.MeshStandardMaterial({ map: textures.dirt }),
+      new THREE.MeshStandardMaterial({ map: textures.grassTop }),
+      new THREE.MeshStandardMaterial({ map: textures.dirt }),
+      new THREE.MeshStandardMaterial({ map: textures.dirt }),
+      new THREE.MeshStandardMaterial({ map: textures.dirt })
+    ]
+  },
+  {
+    id: "dirt",
+    name: "Erde",
+    inventoryTexture: textures.dirt,
+    materials: Array.from({ length: 6 }, () => new THREE.MeshStandardMaterial({ map: textures.dirt }))
+  },
+  {
+    id: "stone",
+    name: "Stein",
+    inventoryTexture: textures.stone,
+    materials: Array.from({ length: 6 }, () => new THREE.MeshStandardMaterial({ map: textures.stone }))
+  },
+  {
+    id: "sand",
+    name: "Sand",
+    inventoryTexture: textures.sand,
+    materials: Array.from({ length: 6 }, () => new THREE.MeshStandardMaterial({ map: textures.sand }))
+  }
+];
+
+let selectedBlockIndex = 0;
+const inventoryCounts = [8, 6, 12, 6];
+const FALL_DAMAGE_SAFE_SPEED = 12;
+const FALL_DAMAGE_SCALE = 1.6;
+let isCreativeMode = false;
+
+function buildInventory() {
+  inventoryElement.innerHTML = "";
+
+  blockTypes.forEach((blockType, index) => {
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.dataset.index = String(index);
+
+    const number = document.createElement("span");
+    number.textContent = String(index + 1);
+    number.className = "slot-number";
+
+    const icon = document.createElement("img");
+    icon.src = blockType.inventoryTexture.image.toDataURL();
+    icon.alt = "";
+
+    const count = document.createElement("span");
+    count.className = "slot-count";
+    count.textContent = String(inventoryCounts[index]);
+
+    slot.append(number, icon, count);
+    inventoryElement.appendChild(slot);
+  });
+}
+
+function updateInventorySelection() {
+  [...inventoryElement.children].forEach((slot, index) => {
+    slot.classList.toggle("active", index === selectedBlockIndex);
+    slot.querySelector(".slot-count").textContent = isCreativeMode ? "inf" : String(inventoryCounts[index]);
+  });
+
+  const countLabel = isCreativeMode ? "unendlich" : String(inventoryCounts[selectedBlockIndex]);
+  selectedLabelElement.textContent = `Block: ${blockTypes[selectedBlockIndex].name} (${countLabel})`;
+}
+
+function updateHearts() {
+  heartElements.forEach((heart, index) => {
+    const heartValue = (index + 1) * 2;
+    heart.classList.remove("empty", "half");
+
+    if (player.isCreative) {
+      heart.classList.add("empty");
+      return;
+    }
+
+    if (player.health >= heartValue) {
+      return;
+    }
+
+    if (player.health === heartValue - 1) {
+      heart.classList.add("half");
+      return;
+    }
+
+    heart.classList.add("empty");
+  });
+}
+
+function updateModeLabel() {
+  modeLabelElement.textContent = player.isCreative ? "Modus: Kreativ" : "Modus: Ueberleben";
+}
+
+function applyDamage(amount) {
+  if (player.isCreative || player.isDead || amount <= 0) {
+    return;
+  }
+
+  player.health = Math.max(0, player.health - amount);
+  updateHearts();
+
+  if (player.health <= 0) {
+    killPlayer();
+  }
+}
+
+function createBlock(typeIndex, position) {
+  const blockType = blockTypes[typeIndex];
+  const cube = new THREE.Mesh(geometry, blockType.materials);
+  cube.position.copy(position);
+  cube.userData.typeIndex = typeIndex;
+  cube.castShadow = true;
+  cube.receiveShadow = true;
+  scene.add(cube);
+  blocks.push(cube);
+  return cube;
+}
+
+function createDrop(typeIndex, position) {
+  const drop = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35, 0.35, 0.35),
+    blockTypes[typeIndex].materials
+  );
+  drop.position.copy(position);
+  drop.position.y += 0.3;
+  drop.userData.typeIndex = typeIndex;
+  drop.userData.velocity = new THREE.Vector3(
+    (Math.random() - 0.5) * 1.8,
+    2.4 + Math.random() * 0.4,
+    (Math.random() - 0.5) * 1.8
+  );
+  scene.add(drop);
+  drops.push(drop);
+  return drop;
+}
+
+for (let x = -10; x < 10; x++) {
+  for (let z = -10; z < 10; z++) {
+    createBlock(2, new THREE.Vector3(x, -1, z));
+
+    const surfaceType = Math.abs(x + z) % 7 === 0 ? 3 : 0;
+    createBlock(surfaceType, new THREE.Vector3(x, 0, z));
+
+    if ((x * x + z * z) % 11 === 0) {
+      createBlock(1, new THREE.Vector3(x, 1, z));
+    }
+  }
+}
+
+buildInventory();
+updateInventorySelection();
+
+const clock = new THREE.Clock();
+const spawnPoint = new THREE.Vector3(0, 3.6, 7);
+const player = {
+  eyeHeight: 1.6,
+  height: 1.8,
+  radius: 0.35,
+  moveSpeed: 4.5,
+  jumpSpeed: 8.8,
+  gravity: 20,
+  velocity: new THREE.Vector3(),
+  onGround: false,
+  maxHealth: 10,
+  health: 10,
+  isDead: false,
+  isCreative: false,
+  flySpeed: 6,
+  verticalSpeed: 0,
+  fallStartY: null
+};
+
+camera.position.copy(spawnPoint);
+updateHearts();
+updateModeLabel();
+
+const keys = {};
+document.addEventListener("keydown", (event) => {
+  keys[event.code] = true;
+
+  if (event.code === "KeyH") {
+    player.isCreative = !player.isCreative;
+    isCreativeMode = player.isCreative;
+    player.velocity.set(0, 0, 0);
+    player.verticalSpeed = 0;
+    player.onGround = false;
+    player.fallStartY = null;
+    player.health = player.isCreative ? player.maxHealth : Math.max(1, player.health);
+    updateHearts();
+    updateInventorySelection();
+    updateModeLabel();
+  }
+
+  if (event.code === "Space" && player.isCreative) {
+    return;
+  }
+
+  if (event.code === "Space" && player.onGround) {
+    player.velocity.y = player.jumpSpeed;
+    player.onGround = false;
+    player.fallStartY = camera.position.y;
+  }
+
+  if (/^Digit[1-4]$/.test(event.code)) {
+    selectedBlockIndex = Number(event.code.replace("Digit", "")) - 1;
+    updateInventorySelection();
+  }
+});
+
+document.addEventListener("keyup", (event) => {
+  keys[event.code] = false;
+});
+
+const raycaster = new THREE.Raycaster();
+
+function getPlayerBounds(position = camera.position) {
+  const feetY = position.y - player.eyeHeight;
+
+  return {
+    minX: position.x - player.radius,
+    maxX: position.x + player.radius,
+    minY: feetY,
+    maxY: feetY + player.height,
+    minZ: position.z - player.radius,
+    maxZ: position.z + player.radius
+  };
+}
+
+function intersectsBlock(position, block) {
+  const bounds = getPlayerBounds(position);
+  const half = blockSize / 2;
+
+  return (
+    bounds.minX < block.position.x + half &&
+    bounds.maxX > block.position.x - half &&
+    bounds.minY < block.position.y + half &&
+    bounds.maxY > block.position.y - half &&
+    bounds.minZ < block.position.z + half &&
+    bounds.maxZ > block.position.z - half
+  );
+}
+
+function collidesAt(position) {
+  return blocks.some((block) => intersectsBlock(position, block));
+}
+
+function getMoveDirection() {
+  const direction = new THREE.Vector3();
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  forward.normalize();
+
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+  if (keys["KeyW"]) direction.add(forward);
+  if (keys["KeyS"]) direction.sub(forward);
+  if (keys["KeyA"]) direction.add(right);
+  if (keys["KeyD"]) direction.sub(right);
+
+  if (direction.lengthSq() > 0) {
+    direction.normalize();
+  }
+
+  return direction;
+}
+
+function movePlayer(delta) {
+  if (player.isDead) {
+    return;
+  }
+
+  const moveDirection = getMoveDirection();
+  const horizontalStep = (player.isCreative ? player.flySpeed : player.moveSpeed) * delta;
+
+  if (player.isCreative) {
+    const flyPosition = camera.position.clone();
+    flyPosition.x += moveDirection.x * horizontalStep;
+    flyPosition.z += moveDirection.z * horizontalStep;
+
+    if (keys["Space"]) {
+      player.verticalSpeed = player.flySpeed * delta;
+    } else if (keys["ShiftLeft"] || keys["ShiftRight"]) {
+      player.verticalSpeed = -player.flySpeed * delta;
+    } else {
+      player.verticalSpeed = 0;
+    }
+
+    flyPosition.y += player.verticalSpeed;
+    camera.position.copy(flyPosition);
+    player.onGround = false;
+    return;
+  }
+
+  player.velocity.x = moveDirection.x * horizontalStep;
+  player.velocity.z = moveDirection.z * horizontalStep;
+  player.velocity.y -= player.gravity * delta;
+
+  const nextPosition = camera.position.clone();
+
+  nextPosition.x += player.velocity.x;
+  if (!collidesAt(nextPosition)) {
+    camera.position.x = nextPosition.x;
+  }
+
+  nextPosition.copy(camera.position);
+  nextPosition.z += player.velocity.z;
+  if (!collidesAt(nextPosition)) {
+    camera.position.z = nextPosition.z;
+  }
+
+  nextPosition.copy(camera.position);
+  nextPosition.y += player.velocity.y * delta;
+
+  if (!collidesAt(nextPosition)) {
+    if (player.velocity.y < 0 && player.fallStartY === null) {
+      player.fallStartY = camera.position.y;
+    }
+    camera.position.y = nextPosition.y;
+    player.onGround = false;
+    return;
+  }
+
+  if (player.velocity.y <= 0) {
+    player.onGround = true;
+    if (player.fallStartY !== null) {
+      const impactSpeed = Math.abs(player.velocity.y);
+      const damage = Math.max(0, Math.floor((impactSpeed - FALL_DAMAGE_SAFE_SPEED) / FALL_DAMAGE_SCALE));
+      applyDamage(damage);
+      player.fallStartY = null;
+    }
+  }
+
+  player.velocity.y = 0;
+}
+
+function respawnPlayer() {
+  camera.position.copy(spawnPoint);
+  player.velocity.set(0, 0, 0);
+  player.verticalSpeed = 0;
+  player.onGround = false;
+  player.fallStartY = null;
+  player.health = player.maxHealth;
+  player.isDead = false;
+  updateHearts();
+}
+
+function killPlayer() {
+  if (player.isCreative) {
+    return;
+  }
+
+  if (player.isDead) {
+    return;
+  }
+
+  player.isDead = true;
+  player.health = 0;
+  updateHearts();
+
+  window.setTimeout(() => {
+    respawnPlayer();
+  }, 700);
+}
+
+function updateDrops(delta) {
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const drop = drops[i];
+    const velocity = drop.userData.velocity;
+
+    velocity.y -= 14 * delta;
+    drop.position.addScaledVector(velocity, delta);
+    drop.rotation.x += 2.8 * delta;
+    drop.rotation.y += 4.2 * delta;
+
+    if (drop.position.y < 0.18) {
+      drop.position.y = 0.18;
+      velocity.y = 0;
+      velocity.x *= 0.88;
+      velocity.z *= 0.88;
+    }
+
+    const dx = drop.position.x - camera.position.x;
+    const dy = drop.position.y - (camera.position.y - 1.1);
+    const dz = drop.position.z - camera.position.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (distance < 1.2) {
+      if (!player.isCreative) {
+        inventoryCounts[drop.userData.typeIndex] += 1;
+      }
+      scene.remove(drop);
+      drops.splice(i, 1);
+      updateInventorySelection();
+    }
+  }
+}
+
+function swingHand() {
+  handElement.classList.remove("swing");
+  void handElement.offsetWidth;
+  handElement.classList.add("swing");
+}
+
+document.addEventListener("mousedown", (event) => {
+  swingHand();
+
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const intersects = raycaster.intersectObjects(blocks);
+
+  if (intersects.length === 0) {
+    return;
+  }
+
+  const hit = intersects[0].object;
+
+  if (event.button === 0) {
+    if (!player.isCreative) {
+      createDrop(hit.userData.typeIndex, hit.position);
+    }
+    scene.remove(hit);
+    blocks.splice(blocks.indexOf(hit), 1);
+  }
+
+  if (event.button === 2) {
+    if (!player.isCreative && inventoryCounts[selectedBlockIndex] <= 0) {
+      return;
+    }
+
+    const newPosition = hit.position.clone().add(intersects[0].face.normal);
+    const previewBlock = { position: newPosition };
+
+    if (!intersectsBlock(camera.position, previewBlock)) {
+      createBlock(selectedBlockIndex, newPosition);
+      if (!player.isCreative) {
+        inventoryCounts[selectedBlockIndex] -= 1;
+      }
+      updateInventorySelection();
+    }
+  }
+});
+
+window.addEventListener("contextmenu", (event) => event.preventDefault());
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.05);
+
+  movePlayer(delta);
+  updateDrops(delta);
+
+  if (!player.isCreative && camera.position.y < -20) {
+    killPlayer();
+  }
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
