@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Minicraft</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div id="hud" aria-hidden="true">
+  <div id="hearts">
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+    <div class="heart"></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="mode-label"></div>
+  <div id="selected-label"></div>
+  <div id="inventory"></div>
+  <div id="hand">
+    <div class="forearm"></div>
+    <div class="hand-top"></div>
+    <div class="thumb"></div>
+  </div>
+</div>
+
+<!-- IMPORTMAP BLEIBT -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js"
+  }
+}
+</script>
+
+<!-- DEIN SCRIPT -->
+<script type="module" src="./script.js"></script>
+
+</body>
+</html>
